@@ -1,0 +1,37 @@
+app:
+  name: ServerTestApp
+  version: 1.0.0
+
+server:
+  port: 8000
+
+alerts:
+  emails:
+    - a.itskovich@molbulak.com
+
+email:
+  from: finstart.mailer@molbulak.com
+  username: fintstart.mailer
+  password: Shaxz40da201306
+  host: mail.mofflbulak.com
+  address: mail.molbulak.com
+  port: 25
+  encoding: utf-8
+
+fr:
+  url: http://10.1.2.108:8091
+  developer_id: 106567582
+
+sh:
+  executor: C:\Program Files\Git\bin\bash.exe
+
+prod:
+  qcb:
+    version: 1
+
+
+dev:
+  qcb:
+    version: 1.1
+
+
