@@ -1,7 +1,9 @@
 from opyoid import Module
 from src.mybootstrap_core_itskovichanton import di
-
 from src.mybootstrap_mvc_itskovichanton.di import MVCModule
+
+from src.mybootstrap_mvc_fastapi_itskovichanton.middleware_logging import HTTPLoggingMiddleware
+from tests import server
 
 
 class TestMVCModule(Module):

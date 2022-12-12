@@ -28,3 +28,7 @@ def object_to_dict(obj):
         return data
     else:
         return obj
+
+
+def tuple_to_dict(t: list):
+    return dict((x, y) for x, y in t)

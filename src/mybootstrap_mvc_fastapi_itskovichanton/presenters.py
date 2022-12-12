@@ -5,11 +5,9 @@ from dicttoxml import dicttoxml
 from fastapi.encoders import jsonable_encoder, SetIntStr, DictIntStrAny
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
-
+from src.mybootstrap_mvc_fastapi_itskovichanton.utils import object_to_dict
 from src.mybootstrap_mvc_itskovichanton.pipeline import Result
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
-
-from src.mybootstrap_mvc_fastapi_itskovichanton.utils import object_to_dict
 
 
 @dataclass
@@ -38,7 +36,7 @@ class JSONResultPresenterImpl(ResultPresenter):
     def present(self, r: Result) -> Any:
         return JSONResponse(
             status_code=self.http_code(r),
-            content=jsonable_encoder(object_to_dict(r), exclude_unset=self.exclude_unset,
+            content=jsonable_encoder(r, exclude_unset=self.exclude_unset,
                                      exclude_none=self.exclude_none,
                                      exclude_defaults=self.exclude_defaults,
                                      exclude=self.exclude, by_alias=self.by_alias,
