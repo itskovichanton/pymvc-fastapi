@@ -5,12 +5,13 @@ from src.mybootstrap_core_itskovichanton.logger import LoggerService
 from src.mybootstrap_ioc_itskovichanton.ioc import bean
 
 from src.mybootstrap_mvc_fastapi_itskovichanton.middleware_logging import HTTPLoggingMiddleware
-from tests.controller import TestController
+from controller import TestController, TestController2
 
 
 @bean(no_polymorph=True, port=("server.port", int, 8000))
 class TestServer:
     test_controller: TestController
+    test_controller2: TestController2
     logger_service: LoggerService
 
     def start(self):

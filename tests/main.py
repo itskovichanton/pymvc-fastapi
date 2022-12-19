@@ -1,5 +1,5 @@
-from tests.app import ServerMVCApp
-from tests.di import injector
+from app import ServerMVCApp
+from di import injector
 
 
 def main() -> None:

@@ -1,27 +1,24 @@
 from dataclasses import dataclass
 from typing import Any, Optional, Union
 
-from dicttoxml import dicttoxml
 from fastapi.encoders import jsonable_encoder, SetIntStr, DictIntStrAny
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
-from src.mybootstrap_mvc_fastapi_itskovichanton.utils import object_to_dict
 from src.mybootstrap_mvc_itskovichanton.pipeline import Result
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
+from xsdata.formats.dataclass.serializers import XmlSerializer
+from xsdata.formats.dataclass.serializers.config import SerializerConfig
 
 
 @dataclass
 class XMLResultPresenterImpl(ResultPresenter):
-    root = True
-    custom_root = None
-    ids = False
-    attr_type = True
-    cdata = False
+
+    def __init__(self, config: SerializerConfig = SerializerConfig(pretty_print=True)) -> None:
+        super().__init__()
+        self.xml_serializer = XmlSerializer(config=config)
 
     def present(self, r: Result) -> Any:
-        data = dicttoxml(object_to_dict(r), custom_root=self.custom_root, root=self.root, ids=self.ids,
-                         attr_type=self.attr_type, cdata=self.cdata)
-        return Response(content=data, media_type="application/xml")
+        return Response(content=self.xml_serializer.render(r), media_type="application/xml")
 
 
 @dataclass

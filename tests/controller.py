@@ -49,7 +49,7 @@ class SearchFeedAction(Action):
 @bean
 class TestAction(Action):
 
-    def run(self, args: Any) -> Any:
+    def run(self, args: Any = None, prev_result: Any = None) -> Any:
         return {"a": 100}
 
 
@@ -59,12 +59,12 @@ class TestController(Controller):
     search_feed_action: SearchFeedAction
 
     async def test(self, table: str, request: Request, q: str, limit: int = 0, count: int = 100):
-        call = get_call_from_request(request)
-        call.query = q
-        call.limit = limit
-        call.count = count
-        call.table = table
-        return await self.run(self.search_feed_action, call)
+        p = get_call_from_request(request)
+        p.query = q
+        p.limit = limit
+        p.count = count
+        p.table = table
+        return await self.run(self.search_feed_action, call=p)
 
 
 @bean
