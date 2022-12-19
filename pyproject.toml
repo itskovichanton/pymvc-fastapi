@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "mybootstrap_mvc_fastapi_itskovichanton"
-version = "0.0.1"
+version = "1.0.0"
 authors = [
     { name = "Anton Itskovich", email = "itskovichae@gmail.com" },
 ]
