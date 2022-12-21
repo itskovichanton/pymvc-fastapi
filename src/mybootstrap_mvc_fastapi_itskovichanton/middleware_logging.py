@@ -47,8 +47,8 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         response_content_bytes, response_headers, response_status = await self._get_response_params(response)
 
         # If there is no request body handle exception, otherwise convert bytes to JSON.
-        req_body = str(request_body_bytes)
-        response_body = str(response_content_bytes)
+        req_body = request_body_bytes.decode(self.encoding)
+        response_body = response_content_bytes.decode(self.encoding)
         # Logging of relevant variables.
         self.logger.info(msg={"response_headers": utils.tuple_to_dict(response.headers.items()),
                               "request_headers": utils.tuple_to_dict(request.headers.items()),
