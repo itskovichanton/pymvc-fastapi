@@ -2,12 +2,11 @@ import typing
 from logging import Logger
 from typing import Callable, Awaitable, Tuple, Dict, List
 
+from src.mybootstrap_mvc_fastapi_itskovichanton import utils
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from starlette.types import Scope, Message, ASGIApp
-
-from src.mybootstrap_mvc_fastapi_itskovichanton import utils
 
 
 class RequestWithBody(Request):
@@ -47,8 +46,13 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         response_content_bytes, response_headers, response_status = await self._get_response_params(response)
 
         # If there is no request body handle exception, otherwise convert bytes to JSON.
-        req_body = request_body_bytes.decode(self.encoding)
+        try:
+            req_body = request_body_bytes.decode(self.encoding)
+        except:
+            req_body = "<request>"
+
         response_body = response_content_bytes.decode(self.encoding)
+
         # Logging of relevant variables.
         self.logger.info(msg={"response_headers": utils.tuple_to_dict(response.headers.items()),
                               "request_headers": utils.tuple_to_dict(request.headers.items()),

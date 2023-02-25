@@ -1,5 +1,9 @@
+import base64
+import binascii
+
 from fastapi import Request
 from src.mybootstrap_mvc_itskovichanton.pipeline import Call
+from starlette.authentication import AuthenticationError
 
 
 def get_call_from_request(request: Request) -> Call:
@@ -32,3 +36,20 @@ def object_to_dict(obj):
 
 def tuple_to_dict(t: list):
     return dict((x, y) for x, y in t)
+
+
+def get_basic_auth(conn) -> (str, str):
+    if "Authorization" not in conn.headers:
+        return
+
+    auth = conn.headers["Authorization"]
+    try:
+        scheme, credentials = auth.split()
+        if scheme.lower() != 'basic':
+            return
+        decoded = base64.b64decode(credentials).decode("ascii")
+    except (ValueError, UnicodeDecodeError, binascii.Error) as exc:
+        raise AuthenticationError('Invalid basic auth credentials')
+
+    username, _, password = decoded.partition(":")
+    return username, password

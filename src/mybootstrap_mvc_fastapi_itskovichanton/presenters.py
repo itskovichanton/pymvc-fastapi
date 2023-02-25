@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, Dict, Callable
 
 from fastapi.encoders import jsonable_encoder, SetIntStr, DictIntStrAny
 from fastapi.responses import JSONResponse
@@ -29,6 +29,7 @@ class JSONResultPresenterImpl(ResultPresenter):
     exclude_defaults: bool = False,
     exclude_none: bool = False,
     sqlalchemy_safe: bool = True
+    custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None
 
     def present(self, r: Result) -> Any:
         return JSONResponse(
@@ -37,5 +38,5 @@ class JSONResultPresenterImpl(ResultPresenter):
                                      exclude_none=self.exclude_none,
                                      exclude_defaults=self.exclude_defaults,
                                      exclude=self.exclude, by_alias=self.by_alias,
-                                     sqlalchemy_safe=self.sqlalchemy_safe),
+                                     sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
         )
