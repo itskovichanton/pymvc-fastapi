@@ -1,9 +1,10 @@
+from src.mybootstrap_core_itskovichanton.di import injector
+
 from app import ServerMVCApp
-from di import injector
 
 
 def main() -> None:
-    app = injector.inject(ServerMVCApp)
+    app = injector().inject(ServerMVCApp)
     app.run()
 
 

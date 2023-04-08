@@ -4,7 +4,7 @@ from src.mybootstrap_ioc_itskovichanton.ioc import bean
 from server import TestServer
 
 
-@bean(no_polymorph=True)
+@bean
 class ServerMVCApp(Application):
     server: TestServer
 

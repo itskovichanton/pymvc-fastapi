@@ -34,9 +34,12 @@ class JSONResultPresenterImpl(ResultPresenter):
     def present(self, r: Result) -> Any:
         return JSONResponse(
             status_code=self.http_code(r),
-            content=jsonable_encoder(r, exclude_unset=self.exclude_unset,
+            content=jsonable_encoder(self.preprocess_result(r), exclude_unset=self.exclude_unset,
                                      exclude_none=self.exclude_none,
                                      exclude_defaults=self.exclude_defaults,
                                      exclude=self.exclude, by_alias=self.by_alias,
                                      sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
         )
+
+    def preprocess_result(self, r: Result) -> Any:
+        return r
