@@ -8,7 +8,7 @@ from src.mybootstrap_mvc_fastapi_itskovichanton.middleware_logging import HTTPLo
 from controller import TestController, TestController2
 
 
-@bean(no_polymorph=True, port=("server.port", int, 8000))
+@bean(port=("server.port", int, 8000))
 class TestServer:
     test_controller: TestController
     test_controller2: TestController2
