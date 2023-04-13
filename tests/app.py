@@ -9,4 +9,5 @@ class ServerMVCApp(Application):
     server: TestServer
 
     def run(self):
+
         self.server.start()

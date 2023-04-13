@@ -1,7 +1,11 @@
 import base64
 import binascii
 
+import requests
 from fastapi import Request
+from src.mybootstrap_core_itskovichanton.validation import ValidationException
+from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException, ERR_REASON_VALIDATION, \
+    ERR_REASON_SERVER_RESPONDED_WITH_ERROR
 from src.mybootstrap_mvc_itskovichanton.pipeline import Call
 from starlette.authentication import AuthenticationError
 
@@ -52,3 +56,27 @@ def get_basic_auth(conn) -> (str, str):
 
     username, _, password = decoded.partition(":")
     return username, password
+
+
+def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str, str] = None):
+    if isinstance(r, requests.models.Response):
+        try:
+            r = r.json()
+        except:
+            msg = r.text
+            if 200 <= r.status_code <= 300:
+                r = {"result": msg}
+            else:
+                r = {"error": {"message": msg}}
+
+    error = r.get("error")
+    if error:
+        reason = error.get("reason")
+        if reason_mapping is not None:
+            reason = reason_mapping.get(reason) or ERR_REASON_SERVER_RESPONDED_WITH_ERROR
+            error["reason"] = reason
+        if reason == ERR_REASON_VALIDATION:
+            raise ValidationException(validation_reason=error.get("cause"), message=error.get("message"),
+                                      param=error.get("param"), invalid_value=error.get("invalidValue"))
+        raise CoreException(**error)
+    return r.get("result")
