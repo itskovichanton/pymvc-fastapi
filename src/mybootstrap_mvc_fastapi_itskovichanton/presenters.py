@@ -23,18 +23,19 @@ class XMLResultPresenterImpl(ResultPresenter):
 
 @dataclass
 class JSONResultPresenterImpl(ResultPresenter):
-    exclude: Optional[Union[SetIntStr, DictIntStrAny]] = None,
-    by_alias: bool = True,
-    exclude_unset: bool = False,
-    exclude_defaults: bool = False,
-    exclude_none: bool = False,
+    exclude: Optional[Union[SetIntStr, DictIntStrAny]] = None
+    by_alias: bool = True
+    exclude_unset: bool = False
+    exclude_defaults: bool = False
+    exclude_none: bool = False
     sqlalchemy_safe: bool = True
     custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None
 
     def present(self, r: Result) -> Any:
+        r = self.preprocess_result(r)
         return JSONResponse(
             status_code=self.http_code(r),
-            content=jsonable_encoder(self.preprocess_result(r), exclude_unset=self.exclude_unset,
+            content=jsonable_encoder(r, exclude_unset=self.exclude_unset,
                                      exclude_none=self.exclude_none,
                                      exclude_defaults=self.exclude_defaults,
                                      exclude=self.exclude, by_alias=self.by_alias,

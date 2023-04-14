@@ -15,13 +15,11 @@ def get_call_from_request(request: Request) -> Call:
 
 
 def get_ip(request: Request):
-    h = request.client.host
-    if not h:
-        for header in ("X-Forwarded-For", "X-Real-Ip"):
-            h = request.headers.get(header)
-            if h:
-                break
-    return h
+    for header in ("X-Forwarded-For", "X-Real-Ip"):
+        h = request.headers.get(header)
+        if h:
+            return h
+    return request.client.host
 
 
 def object_to_dict(obj):
