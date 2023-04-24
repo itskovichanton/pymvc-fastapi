@@ -4,6 +4,7 @@ from typing import Any, Optional, Union, Dict, Callable
 from fastapi.encoders import jsonable_encoder, SetIntStr, DictIntStrAny
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
+from src.mbulak_tools.utils import to_dict_deep
 from src.mybootstrap_mvc_itskovichanton.pipeline import Result
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
 from xsdata.formats.dataclass.serializers import XmlSerializer
@@ -23,19 +24,22 @@ class XMLResultPresenterImpl(ResultPresenter):
 
 @dataclass
 class JSONResultPresenterImpl(ResultPresenter):
+    to_dict: bool = True
     exclude: Optional[Union[SetIntStr, DictIntStrAny]] = None
     by_alias: bool = True
     exclude_unset: bool = False
     exclude_defaults: bool = False
     exclude_none: bool = False
     sqlalchemy_safe: bool = True
+    include: Optional[Union[SetIntStr, DictIntStrAny]] = None
     custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None
 
     def present(self, r: Result) -> Any:
         r = self.preprocess_result(r)
         return JSONResponse(
             status_code=self.http_code(r),
-            content=jsonable_encoder(r, exclude_unset=self.exclude_unset,
+            content=jsonable_encoder(to_dict_deep(r) if self.to_dict else r, exclude_unset=self.exclude_unset,
+                                     include=self.include,
                                      exclude_none=self.exclude_none,
                                      exclude_defaults=self.exclude_defaults,
                                      exclude=self.exclude, by_alias=self.by_alias,

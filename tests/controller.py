@@ -37,7 +37,7 @@ class ExtApiImpl(ExtApi):
 class SearchFeedAction(Action):
     ext_api: ExtApi
 
-    def run(self, args: Any) -> Any:
+    def run(self, args: Any = None, prev_result: Any = None) -> Any:
         validation.check_not_empty("query", args.query, "Пустой запрос")
         if args.limit == 10:
             return {'answer': args.limit / 0}  # just for tests

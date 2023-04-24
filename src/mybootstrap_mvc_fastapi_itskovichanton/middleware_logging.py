@@ -54,9 +54,9 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         response_body = response_content_bytes.decode(self.encoding)
 
         # Logging of relevant variables.
-        self.logger.info(msg={"response_headers": utils.tuple_to_dict(response.headers.items()),
+        self.logger.info({"response_headers": utils.tuple_to_dict(response.headers.items()),
                               "request_headers": utils.tuple_to_dict(request.headers.items()),
-                              "method": request.method, "url": request.url, "body": req_body,
+                              "method": request.method, "url": request.url, "request-body": req_body,
                               "response": response_body, "response_code": response.status_code})
         # Finally, return the newly instantiated response values
         return Response(response_content_bytes, response_status, response_headers)
