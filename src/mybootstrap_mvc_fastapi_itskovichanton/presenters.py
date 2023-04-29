@@ -12,6 +12,21 @@ from xsdata.formats.dataclass.serializers.config import SerializerConfig
 
 
 @dataclass
+class AsIsResultPresenterImpl(ResultPresenter):
+
+    def __init__(self, media_type: str) -> None:
+        super().__init__()
+        self.media_type = media_type
+
+    def present(self, r: Result) -> Any:
+        r = self.preprocess_result(r)
+        content = r.error
+        if not content:
+            content = r.result
+        return Response(content=content, media_type=self.media_type)
+
+
+@dataclass
 class XMLResultPresenterImpl(ResultPresenter):
 
     def __init__(self, config: SerializerConfig = SerializerConfig(pretty_print=True)) -> None:
@@ -19,12 +34,13 @@ class XMLResultPresenterImpl(ResultPresenter):
         self.xml_serializer = XmlSerializer(config=config)
 
     def present(self, r: Result) -> Any:
+        r = self.preprocess_result(r)
         return Response(content=self.xml_serializer.render(r), media_type="application/xml")
 
 
 @dataclass
 class JSONResultPresenterImpl(ResultPresenter):
-    to_dict: bool = True
+    to_dict: bool = False
     exclude: Optional[Union[SetIntStr, DictIntStrAny]] = None
     by_alias: bool = True
     exclude_unset: bool = False
@@ -46,5 +62,4 @@ class JSONResultPresenterImpl(ResultPresenter):
                                      sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
         )
 
-    def preprocess_result(self, r: Result) -> Any:
-        return r
+
