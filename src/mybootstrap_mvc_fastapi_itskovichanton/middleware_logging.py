@@ -31,10 +31,10 @@ class RequestWithBody(Request):
 
 class HTTPLogLineCompiler:
 
-    async def get_log_line(self, request, req_body, response_body, response, elapsed_time_ms):
+    def get_log_line(self, request, req_body, params, response_body, response, elapsed_time_ms):
         return {"response_headers": utils.tuple_to_dict(response.headers.items()),
                 "request_headers": utils.tuple_to_dict(request.headers.items()),
-                "method": request.method, "url": request.url, "request-body": req_body,
+                "method": request.method, "url": request.url, "request-body": params or req_body,
                 "response": response_body, "response_code": response.status_code, "elapsed_ms": elapsed_time_ms}
 
 
@@ -54,8 +54,8 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         self._log_line_compiler = log_line_compiler
         if async_mode:
             self._pool = ThreadPoolExecutor()
-        self._loop = new_event_loop()
-        set_event_loop(self._loop)
+            self._loop = new_event_loop()
+            set_event_loop(self._loop)
 
     async def dispatch(self, request: Request,
                        call_next: Callable[[Request], Awaitable[StreamingResponse]]) -> Response:
@@ -66,9 +66,12 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
 
         response = await call_next(request_with_body)
 
-        self._log_response(request_body_bytes, response, request, int(round(time.time() * 1000) - start_time))
+        response_content_bytes, response_headers, response_status = await self._get_response_params(response)
 
-        return response
+        self._pool.submit(self._loop.run_until_complete,
+                          self._log_response(request_body_bytes, response_content_bytes, request, response, start_time))
+
+        return Response(response_content_bytes, response_status, response_headers)
 
     async def _get_response_params(self, response: StreamingResponse) -> Tuple[bytes, Dict[str, str], int]:
         """Getting the response parameters of a response and create a new response."""
@@ -88,23 +91,22 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         content = b"".join(response_byte_chunks)
         return content, response_headers[0], response_status[0]
 
-    def _log_response(self, request_body_bytes, response, request, elapsed_time_ms):
-        log_future = self._async_log_response(request_body_bytes, response, request, elapsed_time_ms)
-        if self._pool:
-            return self._pool.submit(self._loop.run_until_complete, log_future)
-        self._loop.run_until_complete(log_future)
-
-    async def _async_log_response(self, request_body_bytes, response, request, elapsed_time_ms):
-        response_content_bytes, response_headers, response_status = await self._get_response_params(response)
-
-        try:
-            req_body = request_body_bytes.decode(self._encoding)
-        except:
-            req_body = "<request>"
+    async def _log_response(self, request_body_bytes, response_content_bytes, request, response, start_time):
+        params = dict(request.query_params)
+        req_body = None
+        if request.method == "POST":
+            try:
+                f = await request.form()
+                params.update(f.items())
+            except:
+                try:
+                    req_body = request_body_bytes.decode(self._encoding)
+                except:
+                    req_body = "<request>"
 
         response_body = response_content_bytes.decode(self._encoding)
 
-        log_dict = await self._log_line_compiler.get_log_line(request, req_body, response_body, response,
-                                                              elapsed_time_ms)
+        log_dict = self._log_line_compiler.get_log_line(request, req_body, params, response_body, response,
+                                                        elapsed_time_ms=int(round(time.time() * 1000) - start_time))
         if log_dict is not None:
             self._logger.info(log_dict)
