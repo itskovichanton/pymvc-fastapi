@@ -3,14 +3,12 @@ import typing
 from asyncio import new_event_loop, set_event_loop
 from concurrent.futures import ThreadPoolExecutor
 from logging import Logger
-from typing import Callable, Awaitable, Tuple, Dict, List
-
+from src.mybootstrap_mvc_fastapi_itskovichanton import utils
 from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
 from starlette.requests import Request
 from starlette.responses import Response, StreamingResponse
 from starlette.types import Scope, Message, ASGIApp
-
-from src.mybootstrap_mvc_fastapi_itskovichanton import utils
+from typing import Callable, Awaitable, Tuple, Dict, List
 
 
 class RequestWithBody(Request):
@@ -34,7 +32,7 @@ class HTTPLogLineCompiler:
     def get_log_line(self, request, req_body, params, response_body, response, elapsed_time_ms):
         return {"response_headers": utils.tuple_to_dict(response.headers.items()),
                 "request_headers": utils.tuple_to_dict(request.headers.items()),
-                "method": request.method, "url": request.url, "request-body": params or req_body,
+                "method": request.method, "url": request.url, "params": params, "request-body": req_body,
                 "response": response_body, "response_code": response.status_code, "elapsed_ms": elapsed_time_ms}
 
 
@@ -70,7 +68,7 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
 
         self._pool.submit(self._loop.run_until_complete,
                           self._log_response(request_body_bytes, response_content_bytes, request, response, start_time))
-
+        # await  self._log_response(request_body_bytes, response_content_bytes, request, response, start_time)
         return Response(response_content_bytes, response_status, response_headers)
 
     async def _get_response_params(self, response: StreamingResponse) -> Tuple[bytes, Dict[str, str], int]:
@@ -94,11 +92,14 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
     async def _log_response(self, request_body_bytes, response_content_bytes, request, response, start_time):
         params = dict(request.query_params)
         req_body = None
-        if request.method == "POST":
+        content_type = request.headers.get("content-type")
+        if request.method.casefold() != "GET".casefold():
             try:
                 f = await request.form()
                 params.update(f.items())
             except:
+                ...
+            if not (content_type and "form" in content_type):
                 try:
                     req_body = request_body_bytes.decode(self._encoding)
                 except:

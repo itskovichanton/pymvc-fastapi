@@ -78,3 +78,14 @@ def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str,
                                       param=error.get("param"), invalid_value=error.get("invalidValue"))
         raise CoreException(**error)
     return r.get("result")
+
+
+async def get_params_from_request(request: Request) -> dict:
+    params = dict(request.query_params)
+    if request.method == "POST":
+        try:
+            f = await request.form()
+            params.update(f.items())
+        except:
+            ...
+    return params
