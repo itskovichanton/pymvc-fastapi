@@ -5,7 +5,7 @@ import requests
 from fastapi import Request
 from src.mybootstrap_core_itskovichanton.validation import ValidationException
 from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException, ERR_REASON_VALIDATION, \
-    ERR_REASON_SERVER_RESPONDED_WITH_ERROR
+    ERR_REASON_SERVER_RESPONDED_WITH_ERROR, ERR_REASON_INTERNAL
 from src.mybootstrap_mvc_itskovichanton.pipeline import Call
 from starlette.authentication import AuthenticationError
 
@@ -67,6 +67,9 @@ def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str,
             else:
                 r = {"error": {"message": msg}}
 
+    detail = r.get("detail")
+    if detail:
+        raise CoreException(message=detail, reason=ERR_REASON_INTERNAL)
     error = r.get("error")
     if error:
         reason = error.get("reason")
