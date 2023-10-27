@@ -1,8 +1,11 @@
 import base64
 import binascii
+from dataclasses import is_dataclass, asdict
+from inspect import isclass
 
 import requests
 from fastapi import Request
+from pydantic import BaseModel, Extra
 from src.mybootstrap_core_itskovichanton.validation import ValidationException
 from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException, ERR_REASON_VALIDATION, \
     ERR_REASON_SERVER_RESPONDED_WITH_ERROR, ERR_REASON_INTERNAL
@@ -92,3 +95,20 @@ async def get_params_from_request(request: Request) -> dict:
         except:
             ...
     return params
+
+
+class _M(BaseModel):
+    class Config:
+        extra = Extra.allow
+
+
+def to_pydantic_model(source) -> BaseModel:
+    if source.__class__.__module__ != 'builtins':
+        if not is_dataclass(source):
+            raise TypeError('Source should be a dataclass')
+        r = _M()
+        for k, v in source.__dict__.items():
+            setattr(r, k, to_pydantic_model(v))
+        return r
+
+    return source
