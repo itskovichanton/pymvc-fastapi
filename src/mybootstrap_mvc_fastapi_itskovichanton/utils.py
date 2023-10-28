@@ -105,7 +105,8 @@ class _M(BaseModel):
 def to_pydantic_model(source) -> BaseModel:
     if source.__class__.__module__ != 'builtins':
         if not is_dataclass(source):
-            raise TypeError('Source should be a dataclass')
+            return source
+            # raise TypeError('Source should be a dataclass')
         r = _M()
         for k, v in source.__dict__.items():
             setattr(r, k, to_pydantic_model(v))
