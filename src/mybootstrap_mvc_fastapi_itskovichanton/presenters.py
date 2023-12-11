@@ -1,3 +1,6 @@
+import mimetypes
+import mimetypes
+import os
 from dataclasses import dataclass, asdict
 from typing import Any, Optional, Union, Dict, Callable
 
@@ -6,8 +9,10 @@ from fastapi.responses import JSONResponse
 from fastapi.responses import Response
 from pydantic import BaseModel, Extra
 from src.mybootstrap_core_itskovichanton.utils import to_dict_deep
+from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
 from src.mybootstrap_mvc_itskovichanton.pipeline import Result
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
+from starlette.responses import FileResponse
 from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 
@@ -87,3 +92,39 @@ class JSONResultPresenterImpl(ResultPresenter):
                                      exclude=self.exclude, by_alias=self.by_alias,
                                      sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
         )
+
+
+@dataclass
+class AnyResultPresenterImpl(ResultPresenter):
+    error_presenter: ResultPresenter = default_dataclass_field(JSONResultPresenterImpl())
+
+    def present(self, r: Result) -> Any:
+        r = self.preprocess_result(r)
+        if r.error:
+            return self.error_presenter.present(r)
+
+        file_path = self.get_file_path(r.result)
+        mime = mimetypes.guess_type(file_path)
+        mime = mime[0] if len(mime) > 0 else None
+        return FileResponse(path=file_path, filename=os.path.basename(file_path),
+                            media_type=mime, status_code=self.http_code(r))
+
+    def get_file_path(self, result):
+        return str(result)
+
+
+@dataclass
+class BytesResultPresenterImpl(ResultPresenter):
+    error_presenter: ResultPresenter = default_dataclass_field(JSONResultPresenterImpl())
+    mime_type: str = None
+
+    def present(self, r: Result) -> Any:
+        r = self.preprocess_result(r)
+        if r.error:
+            return self.error_presenter.present(r)
+
+        return Response(r.result, media_type=self.get_mime_type(r.result) or self.mime_type,
+                        status_code=self.http_code(r))
+
+    def get_mime_type(self, result):
+        ...
