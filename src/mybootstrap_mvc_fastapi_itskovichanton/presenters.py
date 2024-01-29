@@ -4,9 +4,10 @@ import os
 from dataclasses import dataclass, asdict
 from typing import Any, Optional, Union, Dict, Callable
 
-from fastapi.encoders import jsonable_encoder, SetIntStr, DictIntStrAny
+from fastapi.encoders import jsonable_encoder
 from fastapi.responses import JSONResponse
 from fastapi.responses import Response
+from fastapi.types import IncEx
 from pydantic import BaseModel, Extra
 from src.mybootstrap_core_itskovichanton.utils import to_dict_deep
 from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
@@ -71,13 +72,13 @@ def to_result_model(x: Result):
 @dataclass
 class JSONResultPresenterImpl(ResultPresenter):
     to_dict: bool = False
-    exclude: Optional[Union[SetIntStr, DictIntStrAny]] = None
+    exclude: Optional[IncEx] = None
     by_alias: bool = True
     exclude_unset: bool = False
     exclude_defaults: bool = False
     exclude_none: bool = True
     sqlalchemy_safe: bool = True
-    include: Optional[Union[SetIntStr, DictIntStrAny]] = None
+    include: Optional[IncEx] = None
     custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None
 
     def present(self, r: Result) -> Any:
