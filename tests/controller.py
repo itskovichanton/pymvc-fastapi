@@ -6,7 +6,6 @@ from fastapi import Request
 from src.mybootstrap_core_itskovichanton import validation
 from src.mybootstrap_ioc_itskovichanton.ioc import bean
 from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
-from src.mybootstrap_mvc_itskovichanton.controller import Controller
 from src.mybootstrap_mvc_itskovichanton.pipeline import Action
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
 
@@ -54,7 +53,7 @@ class TestAction(Action):
 
 
 @bean
-class TestController(Controller):
+class TestController:
     default_result_presenter: ResultPresenter = default_dataclass_field(JSONResultPresenterImpl())
     search_feed_action: SearchFeedAction
 
@@ -68,7 +67,7 @@ class TestController(Controller):
 
 
 @bean
-class TestController2(Controller):
+class TestController2:
     default_result_presenter: ResultPresenter = default_dataclass_field(XMLResultPresenterImpl())
     search_feed_action: SearchFeedAction
     test_action: TestAction
