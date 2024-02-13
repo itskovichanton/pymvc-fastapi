@@ -1,5 +1,4 @@
 import mimetypes
-import mimetypes
 import os
 from dataclasses import dataclass, asdict
 from typing import Any, Optional, Union, Dict, Callable
@@ -10,13 +9,12 @@ from fastapi.responses import Response
 from pydantic import BaseModel, Extra
 from src.mybootstrap_core_itskovichanton.utils import to_dict_deep
 from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
+from src.mybootstrap_mvc_fastapi_itskovichanton.utils import to_pydantic_model
 from src.mybootstrap_mvc_itskovichanton.pipeline import Result
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
 from starlette.responses import FileResponse
 from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
-
-from src.mybootstrap_mvc_fastapi_itskovichanton.utils import to_pydantic_model
 
 
 @dataclass
@@ -25,13 +23,17 @@ class AsIsResultPresenterImpl(ResultPresenter):
     def __init__(self, media_type: str) -> None:
         super().__init__()
         self.media_type = media_type
+        self.default_presenter = JSONResultPresenterImpl()
 
     def present(self, r: Result) -> Any:
         r = self.preprocess_result(r)
         content = r.error
         if not content:
             content = r.result
-        return Response(content=content, media_type=self.media_type)
+        try:
+            return Response(content=content, media_type=self.media_type)
+        except:
+            return self.default_presenter.present(r)
 
 
 @dataclass
