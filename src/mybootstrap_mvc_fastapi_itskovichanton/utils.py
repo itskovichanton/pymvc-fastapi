@@ -10,7 +10,7 @@ from pydantic import BaseModel, Extra
 from src.mybootstrap_core_itskovichanton.utils import is_listable
 from src.mybootstrap_core_itskovichanton.validation import ValidationException
 from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException, ERR_REASON_VALIDATION, \
-    ERR_REASON_SERVER_RESPONDED_WITH_ERROR, ERR_REASON_INTERNAL
+    ERR_REASON_SERVER_RESPONDED_WITH_ERROR, ERR_REASON_INTERNAL, ERR_REASON_SERVER_RESPONDED_WITH_ERROR_NOT_FOUND
 from src.mybootstrap_mvc_itskovichanton.pipeline import Call
 from starlette.authentication import AuthenticationError
 
@@ -62,7 +62,9 @@ def get_basic_auth(conn) -> (str, str):
 
 
 def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str, str] = None, cl=None):
+    http_code = 0
     if isinstance(r, requests.models.Response):
+        http_code = r.status_code
         try:
             r = r.json()
         except:
@@ -74,7 +76,9 @@ def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str,
 
     detail = r.get("detail")
     if detail:
-        raise CoreException(message=detail, reason=ERR_REASON_INTERNAL)
+        raise CoreException(message=detail,
+                            reason=ERR_REASON_SERVER_RESPONDED_WITH_ERROR_NOT_FOUND
+                            if http_code==404 else ERR_REASON_INTERNAL)
     error = r.get("error")
     if error:
         reason = error.get("reason")
