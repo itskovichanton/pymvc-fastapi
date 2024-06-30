@@ -1,11 +1,13 @@
 import base64
 import binascii
-from dataclasses import is_dataclass, asdict
+from dataclasses import is_dataclass, asdict, dataclass
 from inspect import isclass
 
 import requests
+from dacite import from_dict, Config
 from fastapi import Request
 from pydantic import BaseModel, Extra
+from src.mybootstrap_core_itskovichanton.utils import is_listable
 from src.mybootstrap_core_itskovichanton.validation import ValidationException
 from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException, ERR_REASON_VALIDATION, \
     ERR_REASON_SERVER_RESPONDED_WITH_ERROR, ERR_REASON_INTERNAL
@@ -59,7 +61,7 @@ def get_basic_auth(conn) -> (str, str):
     return username, password
 
 
-def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str, str] = None):
+def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str, str] = None, cl=None):
     if isinstance(r, requests.models.Response):
         try:
             r = r.json()
@@ -83,7 +85,18 @@ def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str,
             raise ValidationException(validation_reason=error.get("cause"), message=error.get("message"),
                                       param=error.get("param"), invalid_value=error.get("invalidValue"))
         raise CoreException(**error)
-    return r.get("result")
+
+    r = r.get("result")
+    if cl:
+        if is_listable(r):
+            @dataclass
+            class _Wrapped:
+                value: cl
+
+            r = from_dict(data_class=_Wrapped, data={"value": r}, config=Config(check_types=False)).value
+        else:
+            r = from_dict(data_class=cl, data=r, config=Config(check_types=False))
+    return r
 
 
 async def get_params_from_request(request: Request) -> dict:
