@@ -1,5 +1,6 @@
 import base64
 import binascii
+import json
 from dataclasses import is_dataclass, asdict, dataclass
 from inspect import isclass
 
@@ -61,7 +62,9 @@ def get_basic_auth(conn) -> (str, str):
     return username, password
 
 
-def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str, str] = None, cl=None):
+def parse_response(r: dict | requests.models.Response | str, reason_mapping: dict[str, str] = None, cl=None):
+    if type(r) == str:
+        r = json.loads(r)
     http_code = 0
     if isinstance(r, requests.models.Response):
         http_code = r.status_code
@@ -78,7 +81,7 @@ def parse_response(r: dict | requests.models.Response, reason_mapping: dict[str,
     if detail:
         raise CoreException(message=detail,
                             reason=ERR_REASON_SERVER_RESPONDED_WITH_ERROR_NOT_FOUND
-                            if http_code==404 else ERR_REASON_INTERNAL)
+                            if http_code == 404 else ERR_REASON_INTERNAL)
     error = r.get("error")
     if error:
         reason = error.get("reason")
