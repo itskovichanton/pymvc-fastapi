@@ -121,13 +121,17 @@ class BytesResultPresenterImpl(ResultPresenter):
     error_presenter: ResultPresenter = default_dataclass_field(JSONResultPresenterImpl())
     mime_type: str = None
 
-    def present(self, r: Result) -> Any:
+    def present(self, r: Result, headers=None, mime_type=None) -> Any:
         r = self.preprocess_result(r)
         if r.error:
             return self.error_presenter.present(r)
 
-        return Response(r.result, media_type=self.get_mime_type(r.result) or self.mime_type,
+        return Response(r.result, media_type=mime_type or self.get_mime_type(r.result) or self.mime_type,
+                        headers=headers or self.get_headers(r),
                         status_code=self.http_code(r))
 
     def get_mime_type(self, result):
+        ...
+
+    def get_headers(self, r):
         ...
