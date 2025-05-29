@@ -74,6 +74,7 @@ def to_result_model(x: Result):
 @dataclass
 class JSONResultPresenterImpl(ResultPresenter):
     to_dict: bool = False
+    cause_as_str: bool = False
     exclude: Optional[IncEx] = None
     by_alias: bool = True
     exclude_unset: bool = False
@@ -84,7 +85,13 @@ class JSONResultPresenterImpl(ResultPresenter):
     custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None
 
     def present(self, r: Result) -> Any:
+
         r = self.preprocess_result(r)
+        if r.error:
+            cause = getattr(r.error, "cause", None)
+            if cause:
+                r.error.cause = str(cause)
+
         return JSONResponse(
             status_code=self.http_code(r),
             content=jsonable_encoder(to_dict_deep(r) if self.to_dict else to_pydantic_model(r),
