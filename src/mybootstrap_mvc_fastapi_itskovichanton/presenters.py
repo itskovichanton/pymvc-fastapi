@@ -18,6 +18,19 @@ from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
 
 
+def remove_unprotected_field(obj):
+    # Список полей, которые не следует удалять
+    protected_fields = {'message', 'details', 'reason', 'cause'}
+
+    # Получаем все атрибуты объекта
+    attributes = dir(obj)
+
+    for attr in attributes:
+        if not attr.startswith('__') and attr not in protected_fields:
+            delattr(obj, attr)
+            break  # Удаляем только одно поле
+
+
 @dataclass
 class AsIsResultPresenterImpl(ResultPresenter):
 
@@ -85,23 +98,31 @@ class JSONResultPresenterImpl(ResultPresenter):
     custom_encoder: Optional[Dict[Any, Callable[[Any], Any]]] = None
 
     def present(self, r: Result) -> Any:
-
         r = self.preprocess_result(r)
-        if r.error:
-            cause = getattr(r.error, "cause", None)
-            if cause:
-                r.error.cause = str(cause)
 
-        return JSONResponse(
-            status_code=self.http_code(r),
-            content=jsonable_encoder(to_dict_deep(r) if self.to_dict else to_pydantic_model(r),
-                                     exclude_unset=self.exclude_unset,
-                                     include=self.include,
-                                     exclude_none=self.exclude_none,
-                                     exclude_defaults=self.exclude_defaults,
-                                     exclude=self.exclude, by_alias=self.by_alias,
-                                     sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
-        )
+        if self.cause_as_str:
+            try:
+                if hasattr(r, "error") and r.error:
+                    cause = getattr(r.error, "cause", None)
+                    if cause:
+                        r.error.cause = str(cause)
+            except:
+                ...
+        while True:
+            try:
+                return JSONResponse(
+                    status_code=self.http_code(r),
+                    content=jsonable_encoder(to_dict_deep(r) if self.to_dict else to_pydantic_model(r),
+                                             exclude_unset=self.exclude_unset,
+                                             include=self.include,
+                                             exclude_none=self.exclude_none,
+                                             exclude_defaults=self.exclude_defaults,
+                                             exclude=self.exclude, by_alias=self.by_alias,
+                                             sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
+                )
+            except:
+                if r.error:
+                    remove_unprotected_field(r.error)
 
 
 @dataclass
