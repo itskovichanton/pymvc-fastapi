@@ -111,7 +111,7 @@ class JSONResultPresenterImpl(ResultPresenter):
         while True:
             try:
                 return JSONResponse(
-                    status_code=self.http_code(r),
+                    status_code=self.http_code(r) or 200,
                     content=jsonable_encoder(to_dict_deep(r) if self.to_dict else to_pydantic_model(r),
                                              exclude_unset=self.exclude_unset,
                                              include=self.include,

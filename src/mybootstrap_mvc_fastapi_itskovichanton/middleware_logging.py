@@ -32,6 +32,7 @@ class HTTPLogLineCompiler:
     def get_log_line(self, request, req_body, params, response_body, response, elapsed_time_ms):
         return {"response_headers": utils.tuple_to_dict(response.headers.items()),
                 "request_headers": utils.tuple_to_dict(request.headers.items()),
+                "from": {"ip": request.client.host, "port": request.client.port},
                 "method": request.method, "url": request.url, "params": params, "request-body": req_body,
                 "response": response_body, "response_code": response.status_code, "elapsed_ms": elapsed_time_ms}
 
