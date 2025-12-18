@@ -1,114 +1,285 @@
+import json
 import time
-import typing
-from asyncio import new_event_loop, set_event_loop
-from concurrent.futures import ThreadPoolExecutor
-from logging import Logger
-from src.mybootstrap_mvc_fastapi_itskovichanton import utils
-from starlette.middleware.base import BaseHTTPMiddleware, DispatchFunction
-from starlette.requests import Request
-from starlette.responses import Response, StreamingResponse
-from starlette.types import Scope, Message, ASGIApp
-from typing import Callable, Awaitable, Tuple, Dict, List
-
-
-class RequestWithBody(Request):
-    """Creation of new request with body"""
-
-    def __init__(self, scope: Scope, body: bytes) -> None:
-        super().__init__(scope, self._receive)
-        self._body = body
-        self._body_returned = False
-
-    async def _receive(self) -> Message:
-        if self._body_returned:
-            return {"type": "http.disconnect"}
-        else:
-            self._body_returned = True
-            return {"type": "http.request", "body": self._body, "more_body": False}
-
-
-class HTTPLogLineCompiler:
-
-    def get_log_line(self, request, req_body, params, response_body, response, elapsed_time_ms):
-        return {"response_headers": utils.tuple_to_dict(response.headers.items()),
-                "request_headers": utils.tuple_to_dict(request.headers.items()),
-                "from": {"ip": request.client.host, "port": request.client.port},
-                "method": request.method, "url": request.url, "params": params, "request-body": req_body,
-                "response": response_body, "response_code": response.status_code, "elapsed_ms": elapsed_time_ms}
+from typing import Any, Dict, Optional, Union, Callable
+from datetime import datetime, timezone
+import re
+from fastapi import Request, Response
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.types import ASGIApp
+import logging
 
 
 class HTTPLoggingMiddleware(BaseHTTPMiddleware):
+    """Middleware для логирования HTTP запросов и ответов в структурированном JSON формате"""
 
-    def __init__(self, app: ASGIApp, logger: Logger,
-                 dispatch: typing.Optional[DispatchFunction] = None,
-                 encoding: str = "utf-8",
-                 async_mode: bool = True,
-                 log_line_compiler: HTTPLogLineCompiler = HTTPLogLineCompiler()):
-        super().__init__(app, dispatch)
-        self._logger = logger
-        self._encoding = encoding
-        self._async_mode = async_mode
-        if not log_line_compiler:
-            log_line_compiler = HTTPLogLineCompiler()
-        self._log_line_compiler = log_line_compiler
-        if async_mode:
-            self._pool = ThreadPoolExecutor()
-            self._loop = new_event_loop()
-            set_event_loop(self._loop)
+    def __init__(
+            self,
+            app: ASGIApp,
+            logger: logging.Logger,
+            encoding: str = "utf-8",
+            max_field_len: int = 5000,
+            log_request_body: bool = True,
+            log_response_body: bool = True,
+            sensitive_fields: Optional[set] = None,
+            excluded_paths: Optional[set] = None
+    ):
+        super().__init__(app)
+        self.logger = logger
+        self.max_field_len = max_field_len
+        self.log_request_body = log_request_body
+        self.log_response_body = log_response_body
+        self.sensitive_fields = sensitive_fields or {
+            # 'password', 'token', 'secret', 'authorization',
+            # 'apikey', 'api_key', 'access_token', 'refresh_token'
+        }
+        self.excluded_paths = excluded_paths or {'/healthcheck',
+                                                 # '/health', '/metrics', '/docs', '/openapi.json'
+                                                 }
 
-    async def dispatch(self, request: Request,
-                       call_next: Callable[[Request], Awaitable[StreamingResponse]]) -> Response:
+        # Компилируем паттерны для быстрой проверки
+        self._sensitive_patterns = [
+            re.compile(rf'\b{field}\b', re.IGNORECASE)
+            for field in self.sensitive_fields
+        ]
 
-        start_time = int(round(time.time() * 1000))
-        request_body_bytes = await request.body()
-        request_with_body = RequestWithBody(request.scope, request_body_bytes)
+    async def dispatch(self, request: Request, call_next: Callable):
+        # Пропускаем excluded пути
+        path = request.url.path
+        if path in self.excluded_paths:
+            return await call_next(request)
 
-        response = await call_next(request_with_body)
+        # Получаем IP и порт клиента
+        client_ip = self._get_client_ip(request)
+        client_port = request.client.port if request.client else None
 
-        response_content_bytes, response_headers, response_status = await self._get_response_params(response)
+        # Читаем тело запроса (если нужно)
+        request_body = await self._read_request_body(request) if self.log_request_body else None
 
-        self._pool.submit(self._loop.run_until_complete,
-                          self._log_response(request_body_bytes, response_content_bytes, request, response, start_time))
-        # await  self._log_response(request_body_bytes, response_content_bytes, request, response, start_time)
-        return Response(response_content_bytes, response_status, response_headers)
+        # Засекаем время выполнения
+        start_time = time.perf_counter()
 
-    async def _get_response_params(self, response: StreamingResponse) -> Tuple[bytes, Dict[str, str], int]:
-        """Getting the response parameters of a response and create a new response."""
-        response_byte_chunks: List[bytes] = []
-        response_status: List[int] = []
-        response_headers: List[Dict[str, str]] = []
+        # Выполняем запрос
+        response = await call_next(request)
 
-        async def send(message: Message) -> None:
-            if message["type"] == "http.response.start":
-                response_status.append(message["status"])
-                response_headers.append(
-                    {k.decode(self._encoding): v.decode(self._encoding) for k, v in message["headers"]})
-            else:
-                response_byte_chunks.append(message["body"])
+        # Вычисляем время выполнения
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
 
-        await response.stream_response(send)
-        content = b"".join(response_byte_chunks)
-        return content, response_headers[0], response_status[0]
+        # Читаем тело ответа (если нужно)
+        response_body = await self._read_response_body(response) if self.log_response_body else None
 
-    async def _log_response(self, request_body_bytes, response_content_bytes, request, response, start_time):
-        params = dict(request.query_params)
-        req_body = None
-        content_type = request.headers.get("content-type")
-        if request.method.casefold() != "GET".casefold():
-            try:
-                f = await request.form()
-                params.update(f.items())
-            except:
-                ...
-            if not (content_type and "form" in content_type):
+        # Формируем и логируем структурированный JSON
+        self._log_request_response(
+            request=request,
+            response=response,
+            client_ip=client_ip,
+            client_port=client_port,
+            request_body=request_body,
+            response_body=response_body,
+            elapsed_ms=elapsed_ms
+        )
+
+        return response
+
+    def _get_client_ip(self, request: Request) -> str:
+        """Получение реального IP клиента с учетом прокси"""
+        if "x-real-ip" in request.headers:
+            return request.headers["x-real-ip"]
+        elif "x-forwarded-for" in request.headers:
+            # Берем первый IP из цепочки
+            return request.headers["x-forwarded-for"].split(',')[0].strip()
+        elif request.client:
+            return request.client.host
+        return "unknown"
+
+    async def _read_request_body(self, request: Request) -> Optional[Union[str, bytes]]:
+        """Асинхронное чтение тела запроса с кэшированием"""
+        try:
+            # Проверяем, есть ли тело
+            if request.method not in ("POST", "PUT", "PATCH"):
+                return None
+
+            # Читаем тело
+            body = await request.body()
+
+            # Если это байты и не текст, возвращаем информацию о размере
+            if isinstance(body, bytes):
+                # Пробуем декодить как текст
                 try:
-                    req_body = request_body_bytes.decode(self._encoding)
-                except:
-                    req_body = "<request>"
+                    text_body = body.decode('utf-8')
+                    # Проверяем, не содержит ли тело бинарные данные
+                    if self._is_likely_text(text_body):
+                        return self._sanitize_and_truncate(text_body)
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    pass
 
-        response_body = response_content_bytes.decode(self._encoding)
+                # Если не удалось декодить как текст, возвращаем информацию о размере
+                return f"bytes[{len(body)}]"
 
-        log_dict = self._log_line_compiler.get_log_line(request, req_body, params, response_body, response,
-                                                        elapsed_time_ms=int(round(time.time() * 1000) - start_time))
-        if log_dict is not None:
-            self._logger.info(log_dict)
+            return body
+
+        except Exception as e:
+            self.logger.debug(f"Failed to read request body: {e}")
+            return f"error_reading_body: {str(e)}"
+
+    async def _read_response_body(self, response: Response) -> Optional[Union[str, bytes]]:
+        """Чтение тела ответа"""
+        try:
+            # Клонируем ответ для чтения тела
+            body = b""
+            async for chunk in response.body_iterator:
+                body += chunk
+
+            # Восстанавливаем итератор
+            response.body_iterator = self._recreate_body_iterator(body)
+
+            # Если тело пустое
+            if not body:
+                return None
+
+            # Пробуем декодить как текст
+            content_type = response.headers.get('content-type', '').lower()
+            if 'application/json' in content_type or 'text/' in content_type:
+                try:
+                    text_body = body.decode('utf-8')
+                    return self._sanitize_and_truncate(text_body)
+                except (UnicodeDecodeError, UnicodeEncodeError):
+                    pass
+
+            # Для бинарных данных возвращаем информацию о размере
+            return f"bytes[{len(body)}]"
+
+        except Exception as e:
+            self.logger.debug(f"Failed to read response body: {e}")
+            return f"error_reading_body: {str(e)}"
+
+    @staticmethod
+    async def _recreate_body_iterator(body: bytes):
+        """Воссоздание итератора тела"""
+        yield body
+
+    def _sanitize_and_truncate(self, text: str) -> str:
+        """Очистка чувствительных данных и усечение строки"""
+        # Сначала усекаем
+        if len(text) > self.max_field_len:
+            text = text[:self.max_field_len] + "...[truncated]"
+
+        # Затем маскируем чувствительные данные
+        return self._mask_sensitive_data(text)
+
+    def _mask_sensitive_data(self, text: str) -> str:
+        """Маскировка чувствительных данных в тексте"""
+        # Простая маскировка паролей в JSON
+        for pattern in self._sensitive_patterns:
+            if pattern.search(text):
+                # Ищем и маскируем значения чувствительных полей
+                text = re.sub(
+                    r'("' + pattern.pattern + r'"\s*:\s*)"([^"]*)"',
+                    r'\1"***MASKED***"',
+                    text,
+                    flags=re.IGNORECASE
+                )
+        return text
+
+    def _is_likely_text(self, text: str) -> bool:
+        """Проверяет, похож ли контент на текст"""
+        # Если много непечатаемых символов - вероятно бинарные данные
+        if len(text) == 0:
+            return True
+
+        non_printable = sum(1 for c in text if ord(c) < 32 and c not in '\n\r\t')
+        ratio = non_printable / len(text)
+        return ratio < 0.1  # Если меньше 10% непечатаемых символов
+
+    def _sanitize_headers(self, headers: Dict[str, str]) -> Dict[str, str]:
+        """Очистка заголовков от чувствительных данных"""
+        sanitized = {}
+        for key, value in headers.items():
+            key_lower = key.lower()
+            if any(sensitive in key_lower for sensitive in self.sensitive_fields):
+                sanitized[key] = "***MASKED***"
+            else:
+                sanitized[key] = value
+        return sanitized
+
+    def _parse_query_params(self, request: Request) -> Dict[str, Any]:
+        """Парсинг query параметров"""
+        params = {}
+        for key, value in request.query_params.multi_items():
+            # Для многозначных параметров собираем список
+            if key in params:
+                if isinstance(params[key], list):
+                    params[key].append(value)
+                else:
+                    params[key] = [params[key], value]
+            else:
+                params[key] = value
+        return params
+
+    def _log_request_response(
+            self,
+            request: Request,
+            response: Response,
+            client_ip: str,
+            client_port: Optional[int],
+            request_body: Optional[Union[str, bytes]],
+            response_body: Optional[Union[str, bytes]],
+            elapsed_ms: float
+    ):
+        """Формирование и логирование структурированного JSON"""
+        log_data = {
+            "t": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
+            "request": {
+                "request_headers": self._sanitize_headers(dict(request.headers)),
+                "params": self._parse_query_params(request),
+                "request-body": request_body,
+                "from": {
+                    "ip": client_ip,
+                    "port": client_port
+                }
+            },
+            "method": request.method,
+            "url": str(request.url),
+            "response": {
+                "response_headers": self._sanitize_headers(dict(response.headers)),
+                "body": response_body,
+                "response_code": response.status_code,
+                "elapsed_ms": round(elapsed_ms, 2)
+            }
+        }
+
+        self.logger.info(log_data)
+
+    @classmethod
+    def configure(
+            cls,
+            logger_name: str = "http",
+            max_field_len: int = 5000,
+            log_request_body: bool = True,
+            log_response_body: bool = True,
+            sensitive_fields: Optional[set] = None,
+            excluded_paths: Optional[set] = None
+    ):
+        """Фабричный метод для удобной конфигурации"""
+
+        # Создаем логгер
+        logger = logging.getLogger(logger_name)
+        if not logger.handlers:
+            handler = logging.StreamHandler()
+            formatter = logging.Formatter('%(message)s')  # Только сообщение, т.к. логируем JSON
+            handler.setFormatter(formatter)
+            logger.addHandler(handler)
+            logger.setLevel(logging.INFO)
+            logger.propagate = False
+
+        def _middleware_factory(app: ASGIApp):
+            return cls(
+                app=app,
+                logger=logger,
+                max_field_len=max_field_len,
+                log_request_body=log_request_body,
+                log_response_body=log_response_body,
+                sensitive_fields=sensitive_fields,
+                excluded_paths=excluded_paths
+            )
+
+        return _middleware_factory

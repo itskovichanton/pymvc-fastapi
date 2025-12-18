@@ -10,7 +10,7 @@ alerts:
     - a.itskovich@molbulak.com
 
 email:
-  from: finstart.mailer@molbulak.com
+  from_address: finstart.mailer@molbulak.com
   username: fintstart.mailer
   password: Shaxz40da201306
   host: mail.mofflbulak.com

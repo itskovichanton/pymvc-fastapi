@@ -120,7 +120,8 @@ class JSONResultPresenterImpl(ResultPresenter):
                                              exclude=self.exclude, by_alias=self.by_alias,
                                              sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
                 )
-            except:
+            except BaseException as ex:
+                print(str(ex))
                 if r.error:
                     remove_unprotected_field(r.error)
 

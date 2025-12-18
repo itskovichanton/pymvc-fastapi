@@ -133,3 +133,14 @@ def to_pydantic_model(source) -> BaseModel:
         return r
 
     return source
+
+
+def get_middleware_instances(app):
+    instances = []
+    current = app.middleware_stack
+
+    while hasattr(current, "app"):
+        instances.append(current)
+        current = current.app
+
+    return instances
