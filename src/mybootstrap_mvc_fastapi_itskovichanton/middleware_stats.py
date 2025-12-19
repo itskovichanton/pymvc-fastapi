@@ -1,6 +1,6 @@
 from dataclasses import dataclass, asdict, field
 from typing import List, Optional, Tuple, Deque, Dict, Any
-from collections import deque
+from collections import deque, defaultdict
 import time
 from datetime import datetime, timedelta
 from fastapi import Request, Response
@@ -17,12 +17,13 @@ class StatsHolder:
 
     def init(self, **kwargs):
         self._stats = {}
+        self._statuses = defaultdict(int)
 
     def update(self, stats):
         self._stats = stats
 
     def get(self):
-        return self._stats
+        return {"time": self._stats, "responses": self._statuses}
 
 
 @hashed
@@ -98,7 +99,6 @@ class StatisticsMiddleware(BaseHTTPMiddleware):
 
         # Используем deque для ограниченного хранения записей
         self._records: Deque[RequestRecord] = deque(maxlen=max_records)
-        self._lock = None  # В async context будем использовать asyncio.Lock
 
         # Кэш для статистики
         self._stats_cache: Optional[AggregatedStats] = None
@@ -171,7 +171,9 @@ class StatisticsMiddleware(BaseHTTPMiddleware):
         if 200 <= response.status_code < 300:
             self._success_counter += 1
 
-        if (self._total_counter % 50 == 0 or (not self.stats_holder.get()) or
+        self.stats_holder._statuses[str(response.status_code)] += 1
+
+        if (self._total_counter % 50 == 0 or (not self.stats_holder._stats) or
                 (self._last_stats_set_time and datetime.now() - self._last_stats_set_time > timedelta(seconds=10))):
             self._last_stats_set_time = datetime.now()
             self.stats_holder.update(self.get_extended_stats())
