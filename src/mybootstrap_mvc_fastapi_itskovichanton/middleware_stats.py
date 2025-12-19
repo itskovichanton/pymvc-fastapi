@@ -4,7 +4,7 @@ from collections import deque, defaultdict
 import time
 from datetime import datetime, timedelta
 from fastapi import Request, Response
-from src.mybootstrap_core_itskovichanton.utils import hashed
+from src.mybootstrap_core_itskovichanton.utils import hashed, to_dict_deep
 from src.mybootstrap_ioc_itskovichanton.ioc import bean
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -12,18 +12,39 @@ import statistics
 from functools import lru_cache
 
 
+@dataclass
+class UrlStatsRecord:
+    url: str
+    time: str
+
+
+@dataclass
+class UrlStats:
+    count: int = 0
+    response: str = None
+    last_urls: Deque[UrlStatsRecord] = field(default_factory=lambda: deque(maxlen=10))
+
+    def inc(self, url, response_body=None):
+        self.count += 1
+        self.last_urls.append(UrlStatsRecord(url=str(url), response=response_body, time=str(datetime.now())))
+
+    def summary(self) -> dict:
+        return {"count": self.count, "last_urls": list(self.last_urls)}
+
+
 @bean
 class StatsHolder:
 
     def init(self, **kwargs):
         self._stats = {}
-        self._statuses = defaultdict(int)
+        self._statuses = defaultdict(UrlStats)
 
     def update(self, stats):
         self._stats = stats
 
     def get(self):
-        return {"time": self._stats, "responses": self._statuses}
+        return to_dict_deep({"time": self._stats,
+                             "responses": {k: v.summary() for k, v in self._statuses.items()}})
 
 
 @hashed
@@ -99,6 +120,7 @@ class StatisticsMiddleware(BaseHTTPMiddleware):
 
         # Используем deque для ограниченного хранения записей
         self._records: Deque[RequestRecord] = deque(maxlen=max_records)
+        self._lock = None  # В async context будем использовать asyncio.Lock
 
         # Кэш для статистики
         self._stats_cache: Optional[AggregatedStats] = None
@@ -171,7 +193,10 @@ class StatisticsMiddleware(BaseHTTPMiddleware):
         if 200 <= response.status_code < 300:
             self._success_counter += 1
 
-        self.stats_holder._statuses[str(response.status_code)] += 1
+        if 500 <= response.status_code <= 600:
+            # response_body = await _read_response_body(response, max_len=200)
+            response_body = None
+            self.stats_holder._statuses[str(response.status_code)].inc(request.url, response_body)
 
         if (self._total_counter % 50 == 0 or (not self.stats_holder._stats) or
                 (self._last_stats_set_time and datetime.now() - self._last_stats_set_time > timedelta(seconds=10))):

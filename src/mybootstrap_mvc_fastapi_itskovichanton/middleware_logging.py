@@ -8,6 +8,9 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
 import logging
 
+from src.mybootstrap_mvc_fastapi_itskovichanton.utils import _read_response_body, _sanitize_and_truncate, \
+    _sanitize_headers, _parse_query_params, _read_request_body, _get_client_ip
+
 
 class HTTPLoggingMiddleware(BaseHTTPMiddleware):
     """Middleware для логирования HTTP запросов и ответов в структурированном JSON формате"""
@@ -49,11 +52,12 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Получаем IP и порт клиента
-        client_ip = self._get_client_ip(request)
+        client_ip = _get_client_ip(request)
         client_port = request.client.port if request.client else None
 
         # Читаем тело запроса (если нужно)
-        request_body = await self._read_request_body(request) if self.log_request_body else None
+        request_body = await _read_request_body(request, self.sensitive_fields,
+                                                self.max_field_len) if self.log_request_body else None
 
         # Засекаем время выполнения
         start_time = time.perf_counter()
@@ -65,7 +69,7 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         elapsed_ms = (time.perf_counter() - start_time) * 1000
 
         # Читаем тело ответа (если нужно)
-        response_body = await self._read_response_body(response) if self.log_response_body else None
+        response_body = await _read_response_body(response) if self.log_response_body else None
 
         # Формируем и логируем структурированный JSON
         self._log_request_response(
@@ -79,141 +83,6 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         )
 
         return response
-
-    def _get_client_ip(self, request: Request) -> str:
-        """Получение реального IP клиента с учетом прокси"""
-        if "x-real-ip" in request.headers:
-            return request.headers["x-real-ip"]
-        elif "x-forwarded-for" in request.headers:
-            # Берем первый IP из цепочки
-            return request.headers["x-forwarded-for"].split(',')[0].strip()
-        elif request.client:
-            return request.client.host
-        return "unknown"
-
-    async def _read_request_body(self, request: Request) -> Optional[Union[str, bytes]]:
-        """Асинхронное чтение тела запроса с кэшированием"""
-        try:
-            # Проверяем, есть ли тело
-            if request.method not in ("POST", "PUT", "PATCH"):
-                return None
-
-            # Читаем тело
-            body = await request.body()
-
-            # Если это байты и не текст, возвращаем информацию о размере
-            if isinstance(body, bytes):
-                # Пробуем декодить как текст
-                try:
-                    text_body = body.decode('utf-8')
-                    # Проверяем, не содержит ли тело бинарные данные
-                    if self._is_likely_text(text_body):
-                        return self._sanitize_and_truncate(text_body)
-                except (UnicodeDecodeError, UnicodeEncodeError):
-                    pass
-
-                # Если не удалось декодить как текст, возвращаем информацию о размере
-                return f"bytes[{len(body)}]"
-
-            return body
-
-        except Exception as e:
-            self.logger.debug(f"Failed to read request body: {e}")
-            return f"error_reading_body: {str(e)}"
-
-    async def _read_response_body(self, response: Response) -> Optional[Union[str, bytes]]:
-        """Чтение тела ответа"""
-        try:
-            # Клонируем ответ для чтения тела
-            body = b""
-            async for chunk in response.body_iterator:
-                body += chunk
-
-            # Восстанавливаем итератор
-            response.body_iterator = self._recreate_body_iterator(body)
-
-            # Если тело пустое
-            if not body:
-                return None
-
-            # Пробуем декодить как текст
-            content_type = response.headers.get('content-type', '').lower()
-            if 'application/json' in content_type or 'text/' in content_type:
-                try:
-                    text_body = body.decode('utf-8')
-                    return self._sanitize_and_truncate(text_body)
-                except (UnicodeDecodeError, UnicodeEncodeError):
-                    pass
-
-            # Для бинарных данных возвращаем информацию о размере
-            return f"bytes[{len(body)}]"
-
-        except Exception as e:
-            self.logger.debug(f"Failed to read response body: {e}")
-            return f"error_reading_body: {str(e)}"
-
-    @staticmethod
-    async def _recreate_body_iterator(body: bytes):
-        """Воссоздание итератора тела"""
-        yield body
-
-    def _sanitize_and_truncate(self, text: str) -> str:
-        """Очистка чувствительных данных и усечение строки"""
-        # Сначала усекаем
-        if len(text) > self.max_field_len:
-            text = text[:self.max_field_len] + "...[truncated]"
-
-        # Затем маскируем чувствительные данные
-        return self._mask_sensitive_data(text)
-
-    def _mask_sensitive_data(self, text: str) -> str:
-        """Маскировка чувствительных данных в тексте"""
-        # Простая маскировка паролей в JSON
-        for pattern in self._sensitive_patterns:
-            if pattern.search(text):
-                # Ищем и маскируем значения чувствительных полей
-                text = re.sub(
-                    r'("' + pattern.pattern + r'"\s*:\s*)"([^"]*)"',
-                    r'\1"***MASKED***"',
-                    text,
-                    flags=re.IGNORECASE
-                )
-        return text
-
-    def _is_likely_text(self, text: str) -> bool:
-        """Проверяет, похож ли контент на текст"""
-        # Если много непечатаемых символов - вероятно бинарные данные
-        if len(text) == 0:
-            return True
-
-        non_printable = sum(1 for c in text if ord(c) < 32 and c not in '\n\r\t')
-        ratio = non_printable / len(text)
-        return ratio < 0.1  # Если меньше 10% непечатаемых символов
-
-    def _sanitize_headers(self, headers: Dict[str, str]) -> Dict[str, str]:
-        """Очистка заголовков от чувствительных данных"""
-        sanitized = {}
-        for key, value in headers.items():
-            key_lower = key.lower()
-            if any(sensitive in key_lower for sensitive in self.sensitive_fields):
-                sanitized[key] = "***MASKED***"
-            else:
-                sanitized[key] = value
-        return sanitized
-
-    def _parse_query_params(self, request: Request) -> Dict[str, Any]:
-        """Парсинг query параметров"""
-        params = {}
-        for key, value in request.query_params.multi_items():
-            # Для многозначных параметров собираем список
-            if key in params:
-                if isinstance(params[key], list):
-                    params[key].append(value)
-                else:
-                    params[key] = [params[key], value]
-            else:
-                params[key] = value
-        return params
 
     def _log_request_response(
             self,
@@ -229,8 +98,8 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         log_data = {
             "t": datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z'),
             "request": {
-                "request_headers": self._sanitize_headers(dict(request.headers)),
-                "params": self._parse_query_params(request),
+                "request_headers": _sanitize_headers(dict(request.headers), self.sensitive_fields),
+                "params": _parse_query_params(request),
                 "request-body": request_body,
                 "from": {
                     "ip": client_ip,
@@ -240,7 +109,7 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
             "method": request.method,
             "url": str(request.url),
             "response": {
-                "response_headers": self._sanitize_headers(dict(response.headers)),
+                "response_headers": _sanitize_headers(dict(response.headers), self.sensitive_fields),
                 "body": response_body,
                 "response_code": response.status_code,
                 "elapsed_ms": round(elapsed_ms, 2)
