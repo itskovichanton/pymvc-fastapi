@@ -24,10 +24,12 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
             log_request_body: bool = True,
             log_response_body: bool = True,
             sensitive_fields: Optional[set] = None,
-            excluded_paths: Optional[set] = None
+            excluded_paths: Optional[set] = None,
+            on_request=None
     ):
         super().__init__(app)
         self.logger = logger
+        self.on_request = on_request
         self.max_field_len = max_field_len
         self.log_request_body = log_request_body
         self.log_response_body = log_response_body
@@ -72,7 +74,7 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
         response_body = await _read_response_body(response) if self.log_response_body else None
 
         # Формируем и логируем структурированный JSON
-        self._log_request_response(
+        await self._log_request_response(
             request=request,
             response=response,
             client_ip=client_ip,
@@ -84,7 +86,7 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
 
         return response
 
-    def _log_request_response(
+    async def _log_request_response(
             self,
             request: Request,
             response: Response,
@@ -115,6 +117,9 @@ class HTTPLoggingMiddleware(BaseHTTPMiddleware):
                 "elapsed_ms": round(elapsed_ms, 2)
             }
         }
+
+        if self.on_request:
+            await self.on_request(log_data)
 
         self.logger.info(log_data)
 

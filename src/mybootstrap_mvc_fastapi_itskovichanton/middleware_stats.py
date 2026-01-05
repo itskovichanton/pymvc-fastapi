@@ -24,9 +24,9 @@ class UrlStats:
     response: str = None
     last_urls: Deque[UrlStatsRecord] = field(default_factory=lambda: deque(maxlen=10))
 
-    def inc(self, url, response_body=None):
+    def inc(self, url):
         self.count += 1
-        self.last_urls.append(UrlStatsRecord(url=str(url), response=response_body, time=str(datetime.now())))
+        self.last_urls.append(UrlStatsRecord(url=str(url), time=str(datetime.now())))
 
     def summary(self) -> dict:
         return {"count": self.count, "last_urls": list(self.last_urls)}
