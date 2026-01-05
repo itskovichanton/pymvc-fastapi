@@ -1,15 +1,15 @@
-import json
-import time
-from typing import Any, Dict, Optional, Union, Callable
-from datetime import datetime, timezone
+import logging
 import re
+import time
+from datetime import datetime, timezone
+from typing import Optional, Union, Callable
+
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import logging
 
-from src.mybootstrap_mvc_fastapi_itskovichanton.utils import _read_response_body, _sanitize_and_truncate, \
-    _sanitize_headers, _parse_query_params, _read_request_body, _get_client_ip
+from src.mybootstrap_mvc_fastapi_itskovichanton.utils import _read_response_body, _sanitize_headers, \
+    _parse_query_params, _read_request_body, _get_client_ip
 
 
 class HTTPLoggingMiddleware(BaseHTTPMiddleware):

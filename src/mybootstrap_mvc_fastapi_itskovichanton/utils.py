@@ -2,8 +2,7 @@ import base64
 import binascii
 import json
 import re
-from dataclasses import is_dataclass, asdict, dataclass
-from inspect import isclass
+from dataclasses import is_dataclass, dataclass
 from typing import Optional, Union, Dict, Any
 
 import requests

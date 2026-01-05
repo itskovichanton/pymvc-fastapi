@@ -1,15 +1,16 @@
-from dataclasses import dataclass, asdict, field
-from typing import List, Optional, Tuple, Deque, Dict, Any
-from collections import deque, defaultdict
+import statistics
 import time
+from collections import deque, defaultdict
+from dataclasses import dataclass, asdict, field
 from datetime import datetime, timedelta
+from functools import lru_cache
+from typing import List, Optional, Tuple, Deque, Dict, Any
+
 from fastapi import Request, Response
 from src.mybootstrap_core_itskovichanton.utils import hashed, to_dict_deep
 from src.mybootstrap_ioc_itskovichanton.ioc import bean
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-import statistics
-from functools import lru_cache
 
 
 @dataclass
@@ -193,10 +194,9 @@ class StatisticsMiddleware(BaseHTTPMiddleware):
         if 200 <= response.status_code < 300:
             self._success_counter += 1
 
-        if 500 <= response.status_code <= 600:
+        if 500 <= response.status_code < 600:
             # response_body = await _read_response_body(response, max_len=200)
-            response_body = None
-            self.stats_holder._statuses[str(response.status_code)].inc(request.url, response_body)
+            self.stats_holder._statuses[str(response.status_code)].inc(request.url)
 
         if (self._total_counter % 50 == 0 or (not self.stats_holder._stats) or
                 (self._last_stats_set_time and datetime.now() - self._last_stats_set_time > timedelta(seconds=10))):
