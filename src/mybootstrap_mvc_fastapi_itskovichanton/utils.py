@@ -201,7 +201,8 @@ async def _read_response_body(response: Response, max_len=-1) -> Optional[Union[
         if 'application/json' in content_type or 'text/' in content_type:
             try:
                 text_body = body.decode('utf-8')
-                return _sanitize_and_truncate(text_body)
+                max_field_len = 3000 if 500 <= response.status_code < 600 else 1500
+                return _sanitize_and_truncate(text_body, max_field_len=max_field_len)
             except (UnicodeDecodeError, UnicodeEncodeError):
                 pass
 

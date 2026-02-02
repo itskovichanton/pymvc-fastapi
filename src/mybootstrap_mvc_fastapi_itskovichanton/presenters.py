@@ -10,6 +10,8 @@ from fastapi.types import IncEx
 from pydantic import BaseModel, Extra
 from src.mybootstrap_core_itskovichanton.utils import to_dict_deep
 from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
+from src.mybootstrap_mvc_itskovichanton.error_provider import Err
+from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException
 from src.mybootstrap_mvc_itskovichanton.pipeline import Result
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
 from starlette.responses import FileResponse
@@ -21,15 +23,23 @@ from src.mybootstrap_mvc_fastapi_itskovichanton.utils import to_pydantic_model
 
 def remove_unprotected_field(obj):
     # Список полей, которые не следует удалять
-    protected_fields = {'message', 'details', 'reason', 'cause'}
+    protected_fields = {'message', 'details', 'reason'}
 
     # Получаем все атрибуты объекта
     attributes = dir(obj)
 
     for attr in attributes:
         if not attr.startswith('__') and attr not in protected_fields:
-            delattr(obj, attr)
-            break  # Удаляем только одно поле
+            v = getattr(obj, attr)
+            if v and isinstance(v, CoreException):
+                setattr(obj, attr, str(v))
+                break
+            if hasattr(obj, attr):
+                try:
+                    delattr(obj, attr)
+                    break  # Удаляем только одно поле
+                except:
+                    setattr(obj, attr, None)
 
 
 @dataclass
@@ -109,7 +119,7 @@ class JSONResultPresenterImpl(ResultPresenter):
                         r.error.cause = str(cause)
             except:
                 ...
-        while True:
+        for i in range(1, 10):
             try:
                 return JSONResponse(
                     status_code=self.http_code(r) or 200,
@@ -122,9 +132,12 @@ class JSONResultPresenterImpl(ResultPresenter):
                                              sqlalchemy_safe=self.sqlalchemy_safe, custom_encoder=self.custom_encoder),
                 )
             except BaseException as ex:
-                print(str(ex))
+                print(f"cannot JSONResponse response because of {ex}")
                 if r.error:
-                    remove_unprotected_field(r.error)
+                    if i > 8:
+                        r.error = Err(message=str(ex))
+                    else:
+                        remove_unprotected_field(r.error)
 
 
 @dataclass
