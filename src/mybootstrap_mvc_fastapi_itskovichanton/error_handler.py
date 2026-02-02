@@ -2,11 +2,10 @@ from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
 from src.mybootstrap_ioc_itskovichanton.ioc import bean
 from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
+from src.mybootstrap_mvc_fastapi_itskovichanton.presenters import JSONResultPresenterImpl
 from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException, ERR_REASON_VALIDATION
 from src.mybootstrap_mvc_itskovichanton.pipeline import ActionRunner
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
-
-from src.mybootstrap_mvc_fastapi_itskovichanton.presenters import JSONResultPresenterImpl
 
 
 @bean

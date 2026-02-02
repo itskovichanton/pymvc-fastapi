@@ -10,6 +10,7 @@ from fastapi.types import IncEx
 from pydantic import BaseModel, Extra
 from src.mybootstrap_core_itskovichanton.utils import to_dict_deep
 from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
+from src.mybootstrap_mvc_fastapi_itskovichanton.utils import to_pydantic_model
 from src.mybootstrap_mvc_itskovichanton.error_provider import Err
 from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException
 from src.mybootstrap_mvc_itskovichanton.pipeline import Result
@@ -17,8 +18,6 @@ from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
 from starlette.responses import FileResponse
 from xsdata.formats.dataclass.serializers import XmlSerializer
 from xsdata.formats.dataclass.serializers.config import SerializerConfig
-
-from src.mybootstrap_mvc_fastapi_itskovichanton.utils import to_pydantic_model
 
 
 def remove_unprotected_field(obj):
