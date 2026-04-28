@@ -136,7 +136,8 @@ class JSONResultPresenterImpl(ResultPresenter):
                     if i > 8:
                         r.error = Err(message=str(ex))
                     else:
-                        remove_unprotected_field(r.error)
+                        for i in range(1, 10):
+                            remove_unprotected_field(r.error)
 
 
 @dataclass

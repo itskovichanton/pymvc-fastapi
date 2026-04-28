@@ -7,7 +7,7 @@ from functools import lru_cache
 from typing import List, Optional, Tuple, Deque, Dict, Any
 
 from fastapi import Request, Response
-from src.mybootstrap_core_itskovichanton.utils import hashed, to_dict_deep
+from src.mybootstrap_core_itskovichanton.utils import hashed, to_dict_deep, group_list
 from src.mybootstrap_ioc_itskovichanton.ioc import bean
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
@@ -16,7 +16,10 @@ from starlette.types import ASGIApp
 @dataclass
 class UrlStatsRecord:
     url: str
-    time: str
+    time: float = time.perf_counter()
+
+    def to_dict(self):
+        return {"url": self.url, "ago_sec": time.perf_counter() - self.time}
 
 
 @dataclass
@@ -27,10 +30,13 @@ class UrlStats:
 
     def inc(self, url):
         self.count += 1
-        self.last_urls.append(UrlStatsRecord(url=str(url), time=str(datetime.now())))
+        self.last_urls.append(UrlStatsRecord(url=str(url)))
 
     def summary(self) -> dict:
-        return {"count": self.count, "last_urls": list(self.last_urls)}
+        return {
+            "count": self.count,
+            f"last urls for code={self.response}": [x.to_dict() for x in self.last_urls],
+        }
 
 
 @bean
@@ -46,6 +52,11 @@ class StatsHolder:
     def get(self):
         return to_dict_deep({"time": self._stats,
                              "responses": {k: v.summary() for k, v in self._statuses.items()}})
+
+    def inc(self, url, status_code):
+        st = self._statuses[str(status_code)]
+        st.response = status_code
+        st.inc(url)
 
 
 @hashed
@@ -194,9 +205,7 @@ class StatisticsMiddleware(BaseHTTPMiddleware):
         if 200 <= response.status_code < 300:
             self._success_counter += 1
 
-        if 500 <= response.status_code < 600:
-            # response_body = await _read_response_body(response, max_len=200)
-            self.stats_holder._statuses[str(response.status_code)].inc(request.url)
+        self.stats_holder.inc(request.url, response.status_code)
 
         if (self._total_counter % 50 == 0 or (not self.stats_holder._stats) or
                 (self._last_stats_set_time and datetime.now() - self._last_stats_set_time > timedelta(seconds=10))):
@@ -252,7 +261,7 @@ class StatisticsMiddleware(BaseHTTPMiddleware):
             max_response_time=round(max(times), 2),
             min_response_time=round(min(times), 2),
             total_requests=len(records),
-            most_long_requests=long_requests
+            most_long_requests=group_list(long_requests, "url", "elapsed", "content_length")
         )
 
     def get_stats(self) -> AggregatedStats:
