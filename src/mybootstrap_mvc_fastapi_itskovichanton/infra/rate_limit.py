@@ -2,37 +2,44 @@
 Rate limit через pyrate-limiter (Redis).
 
 ENV: MVC_RATE_LIMIT_ENABLED=true
-(fastapi-limiter 0.2 — только Depends; декоратор держим поверх pyrate_limiter.)
+
+Каждый клиент (IP / S2S-токен) получает свой Redis ZSET.
+Имя элемента в ZSET уникально на каждый запрос: иначе ZADD обновляет
+одну и ту же запись и лимит никогда не срабатывает.
 """
 
 from __future__ import annotations
 
+import inspect
+import time
 from typing import Callable
 
 import redis.asyncio as redis
-from fastapi import Request
 from pyrate_limiter import Duration, Limiter, Rate, RedisBucket
-from src.mybootstrap_mvc_itskovichanton.exceptions import (
-    ERR_REASON_TOO_MANY_REQUESTS,
-    CoreException,
+from pyrate_limiter.exceptions import BucketFullException
+
+from src.mybootstrap_mvc_fastapi_itskovichanton.infra._rate import (
+    client_key,
+    find_request,
+    raise_exceeded,
 )
+from src.mybootstrap_mvc_fastapi_itskovichanton.infra._wrap import preserve_signature
+from src.mybootstrap_mvc_fastapi_itskovichanton.infra.flags import flags
 
-from infra._wrap import preserve_signature
-from infra.flags import flags
-
-# (limit, window_sec) → Limiter; один Redis-клиент на процесс
-_limiters: dict[tuple[int, int], Limiter] = {}
+# (limit, window_sec, identity) → Limiter
+_limiters: dict[tuple[int, int, str], Limiter] = {}
 _redis: redis.Redis | None = None
 
 
-def _client_key(request: Request | None, bucket: str) -> str:
-    ip = "anon"
-    if request is not None:
-        ip = request.client.host if request.client else "anon"
-        tok = request.headers.get(flags().s2s_header)
-        if tok:
-            ip = f"svc:{tok[:8]}"
-    return f"{bucket}:{ip}"
+def configure_redis(client: redis.Redis | None) -> None:
+    """Подменить Redis-клиент (для тестов: fakeredis). Сбрасывает кэш лимитеров."""
+    global _redis
+    _redis = client
+    _limiters.clear()
+
+
+def reset() -> None:
+    configure_redis(None)
 
 
 async def _redis_client() -> redis.Redis:
@@ -42,17 +49,31 @@ async def _redis_client() -> redis.Redis:
     return _redis
 
 
-async def _limiter_for(limit: int, window_sec: int) -> Limiter:
-    key = (limit, window_sec)
-    cached = _limiters.get(key)
+async def _limiter_for(limit: int, window_sec: int, identity: str) -> Limiter:
+    cache_key = (limit, window_sec, identity)
+    cached = _limiters.get(cache_key)
     if cached is not None:
         return cached
+
     rates = [Rate(limit, Duration.SECOND * window_sec)]
     r = await _redis_client()
-    bucket = await RedisBucket.init(rates, r, f"cityvibe:rl:{limit}:{window_sec}")
-    lim = Limiter(bucket)
-    _limiters[key] = lim
-    return lim
+    bucket_key = f"mvc:rl:{limit}:{window_sec}:{identity}"
+    bucket = RedisBucket.init(rates, r, bucket_key)
+    if inspect.isawaitable(bucket):
+        bucket = await bucket
+
+    limiter = Limiter(bucket, raise_when_fail=False)
+    _limiters[cache_key] = limiter
+    return limiter
+
+
+async def _try_acquire(limiter: Limiter, identity: str) -> bool:
+    # ZSET-member должен быть уникален на каждый acquire (см. модульный docstring).
+    item = f"{identity}:{time.time_ns()}"
+    try:
+        return bool(await limiter.try_acquire_async(item))
+    except BucketFullException:
+        return False
 
 
 def rate_limit(bucket: str, limit: int | None = None, window_sec: int | None = None):
@@ -68,22 +89,13 @@ def rate_limit(bucket: str, limit: int | None = None, window_sec: int | None = N
             if not f.rate_limit:
                 return await fn(*args, **kwargs)
 
-            request: Request | None = kwargs.get("request")
-            if request is None:
-                for a in args:
-                    if isinstance(a, Request):
-                        request = a
-                        break
-
+            request = find_request(args, kwargs)
             lim = limit if limit is not None else f.rate_limit_default
             win = window_sec if window_sec is not None else f.rate_limit_window_sec
-            limiter = await _limiter_for(lim, win)
-            ok = await limiter.try_acquire_async(_client_key(request, bucket), blocking=False)
-            if not ok:
-                raise CoreException(
-                    message=f"Rate limit exceeded for '{bucket}' ({lim}/{win}s)",
-                    reason=ERR_REASON_TOO_MANY_REQUESTS,
-                )
+            identity = client_key(request, bucket)
+            limiter = await _limiter_for(lim, win, identity)
+            if not await _try_acquire(limiter, identity):
+                raise_exceeded(bucket, lim, win)
             return await fn(*args, **kwargs)
 
         return preserve_signature(wrapper, fn)
