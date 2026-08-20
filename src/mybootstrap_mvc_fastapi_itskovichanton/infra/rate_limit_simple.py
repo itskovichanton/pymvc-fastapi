@@ -91,6 +91,15 @@ def _guard(
         raise_exceeded(bucket, lim, win)
 
 
+def _is_async(fn: Callable) -> bool:
+    current: Any = fn
+    while current is not None:
+        if inspect.iscoroutinefunction(current):
+            return True
+        current = getattr(current, "__wrapped__", None)
+    return False
+
+
 def rate_limit(
     bucket: str,
     limit: int | None = None,
@@ -103,13 +112,13 @@ def rate_limit(
         @rate_limit("avatar", limit=10, window_sec=60)
         async def upload_avatar(request: Request, ...): ...
 
-    Обычная функция (ключ — имя аргумента):
+    Обычная sync/async функция (ключ — имя аргумента):
         @rate_limit("sms", limit=3, window_sec=60, key="phone", enabled=True)
-        def send_sms(phone: str) -> None: ...
+        async def send_sms(phone: str) -> None: ...
     """
 
     def decorator(fn: Callable):
-        if inspect.iscoroutinefunction(fn):
+        if _is_async(fn):
             async def async_wrapper(*args, **kwargs):
                 _guard(fn, args, kwargs, bucket, limit, window_sec, key, enabled)
                 return await fn(*args, **kwargs)
