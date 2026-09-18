@@ -16,6 +16,18 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
     "Operating System :: OS Independent",
 ]
+dependencies = [
+    "dacite",
+    "fastapi",
+    "pydantic",
+    "requests",
+    "requests-toolbelt",
+    "starlette",
+    "xsdata",
+]
 
 [project.urls]
 "Homepage" = "https://github.com/itskovichanton/pymvc-fastapi"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
