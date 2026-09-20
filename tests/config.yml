@@ -22,8 +22,7 @@ fr:
   url: http://10.1.2.108:8091
   developer_id: 106567582
 
-sh:
-  executor: C:\Program Files\Git\bin\bash.exe
+
 
 prod:
   qcb:
