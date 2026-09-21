@@ -5,7 +5,7 @@ from src.mybootstrap_ioc_itskovichanton.utils import default_dataclass_field
 from src.mybootstrap_mvc_itskovichanton.exceptions import CoreException, ERR_REASON_VALIDATION
 from src.mybootstrap_mvc_itskovichanton.pipeline import ActionRunner
 from src.mybootstrap_mvc_itskovichanton.result_presenter import ResultPresenter
-from presenters import JSONResultPresenterImpl
+from .presenters import JSONResultPresenterImpl
 
 
 @bean
