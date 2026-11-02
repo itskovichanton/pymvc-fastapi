@@ -19,7 +19,13 @@ from starlette.responses import Response
 
 
 def get_call_from_request(request: Request) -> Call:
-    return Call(request=request, ip=get_ip(request), user_agent=request.headers.get("User-Agent"))
+    client = request.client
+    return Call(
+        request=request,
+        ip=get_ip(request),
+        user_agent=request.headers.get("User-Agent"),
+        port=client.port if client else None,
+    )
 
 
 def get_ip(request: Request):
